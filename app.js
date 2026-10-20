@@ -1,20 +1,33 @@
-// Страница календаря: срез из `?d=` (codec.js) → три экрана макета.
-// Экраны перенесены из утверждённого макета (webapp/index.html в репозитории бота) и читают
-// данные только из `snapshot`. Смысл экранов и отправку действий доделывает Задача 8 —
-// места помечены TODO(Task 8).
+// Страница календаря: срез из `?d=` (codec.js) → три экрана макета; действия собирает payload.js,
+// отправляет send() через Telegram.WebApp.sendData. Экраны перенесены из утверждённого макета
+// (webapp/index.html в репозитории бота) и читают данные только из `snapshot`.
 import {
   decodePayload,
   FLAG_NO_OTHERS,
+  FLAG_NO_WAITING,
   FLAG_SHORT_WINDOW,
   SLOT_END,
   SLOT_START,
   SLOT_STEP,
 } from './codec.js';
+import {
+  buildCreateGame,
+  buildGameOp,
+  buildRefresh,
+  buildSetAvailability,
+  dayMinutes,
+  desiredDays,
+  freeCells,
+  halfHours,
+  isPast,
+  painted,
+  toSlots,
+} from './payload.js';
 
 const APP_VERSION = '0.1.0'; // версия страницы (спека §4.1)
 
 let snapshot = null; // Snapshot из codec.js — единственный источник данных экранов
-let days = []; // локальные Date для snapshot.dates
+let days = []; // локальные Date для snapshot.dates (тот же порядок)
 let names = new Map(); // id игрока → имя
 
 const $ = (id) => document.getElementById(id);
@@ -31,62 +44,77 @@ const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;
 const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ESC[c]); // имена и корт — ввод игроков
 const nameOf = (id) => names.get(id) ?? String(id);
 const playerIds = () => snapshot.players.map((p) => p.id);
+const noOthers = () => Boolean(snapshot.flags & FLAG_NO_OTHERS); // чужие нулевые маски — «неизвестно»
+const dayTitle = (d) => `${WD[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+
+function node(tag, className, html) {
+  const el = document.createElement(tag);
+  el.className = className;
+  el.innerHTML = html;
+  return el;
+}
 
 // ------------------------------------------------------------------ данные среза
 
-/** Интервалы игрока на дату: [start, end, 'free' | 'rule']. */
-function slotsFor(id, date) {
-  // TODO(Task 8): при FLAG_NO_OTHERS нулевые маски чужих — «неизвестно», а не «занят»;
-  // чужая доступность = free ∪ rule (эффективная), своя — объявленная.
-  const day = snapshot.availability[id]?.[snapshot.dates.indexOf(date)];
-  if (!day) return [];
-  return [...day.free.map(([s, e]) => [s, e, 'free']), ...day.rule.map(([s, e]) => [s, e, 'rule'])];
-}
-
-/** Состав игры: игроки «да» и их гости («@vasya +1», «@vasya +2»…). */
+/**
+ * Состав игры по id: игроки «да» и их гости («@vasya +1», «@vasya +2»…); `host` — чей это слот.
+ * Гости игрока, который не в «да», не показываются (как на карточке бота).
+ */
 function lineup(game) {
   const out = [];
   for (const id of game.yes) {
-    out.push(nameOf(id));
+    out.push({ host: id, label: nameOf(id) });
     for (const [host, count] of game.guests) {
-      if (host === id) for (let k = 1; k <= count; k++) out.push(`${nameOf(id)} +${k}`);
+      if (host === id) for (let k = 1; k <= count; k++) out.push({ host: id, label: `${nameOf(id)} +${k}` });
     }
   }
   return out;
 }
 
-/** Отрезки дня, на которых свободен один и тот же набор игроков. */
+/**
+ * Отрезки дня, на которых свободен один и тот же набор игроков: у чужих — эффективная
+ * доступность (free ∪ rule из среза), у `me` — объявленная; `me` помечается при показе.
+ */
 function spans(date) {
-  const ids = playerIds();
-  const bounds = new Set();
-  ids.forEach((id) => slotsFor(id, date).forEach(([s, e]) => bounds.add(s).add(e)));
-  const b = [...bounds].sort((x, y) => x - y);
+  const cells = playerIds().map((id) => [id, freeCells(snapshot, id, date)]);
   const out = [];
-  for (let i = 0; i < b.length - 1; i++) {
-    const [a, e] = [b[i], b[i + 1]];
-    const free = ids.filter((id) => slotsFor(id, date).some(([s, f]) => s <= a && f >= e));
-    if (!free.length) continue;
+  for (let m = SLOT_START; m < SLOT_END; m += SLOT_STEP) {
+    const ids = cells.filter(([, set]) => set.has(m)).map(([id]) => id);
+    if (!ids.length) continue;
     const last = out[out.length - 1];
-    if (last && last.end === a && last.ids.join() === free.join()) last.end = e;
-    else out.push({ start: a, end: e, ids: free });
+    if (last && last.end === m && last.ids.join() === ids.join()) last.end = m + SLOT_STEP;
+    else out.push({ start: m, end: m + SLOT_STEP, ids });
   }
   return out;
 }
 
-function isPast(date, m) {
-  // TODO(Task 8): редактируемая область — 07:00–23:00, для сегодня только будущие получасы.
-  const now = new Date();
-  const today = iso(now);
-  return date < today || (date === today && m < now.getHours() * 60 + now.getMinutes());
+// ------------------------------------------------------------------ отправка
+
+/** Telegram открыл страницу (а не обычный браузер): SDK грузится всегда, но вне Telegram platform = 'unknown'. */
+const insideTelegram = (tg) => typeof tg?.sendData === 'function' && (tg.platform !== 'unknown' || Boolean(tg.initData));
+
+/**
+ * В Telegram — toast «Отправлено», затем sendData (Telegram сразу закрывает приложение, ответ
+ * бота придёт в чат). В браузере (dev.html) — JSON в консоль и в toast.
+ */
+function send(json) {
+  const tg = window.Telegram?.WebApp;
+  if (insideTelegram(tg)) {
+    toast('Отправлено');
+    tg.sendData(json);
+    return;
+  }
+  console.log('sendData:', json);
+  toast(json.length > 300 ? `${json.slice(0, 300)}…` : json, 6000);
 }
 
-// ------------------------------------------------------------------ действия
-
-// TODO(Task 8): payload.js собирает JSON {v: 1, t: snapshot.stamp, action, …}; toast «Отправлено»,
-// затем Telegram.WebApp.sendData(json); без Telegram (dev.html) — console.log + toast с JSON.
-function pending(action, fields = {}) {
-  console.log('действие (отправка подключается в Задаче 8):', action, fields);
-  toast(`Отправка «${action}» пока не подключена`);
+/** Собрать сообщение и отправить; ошибка сборки (неверное поле, больше 4096 байт) — toast. */
+function act(build) {
+  try {
+    send(build());
+  } catch (error) {
+    toast(error.message);
+  }
 }
 
 // ------------------------------------------------------------------ шапка
@@ -95,7 +123,7 @@ function renderStamp() {
   const at = new Date(snapshot.stamp * 60_000); // unix-минуты → местное время
   const lines = [`данные на ${tm(at.getHours() * 60 + at.getMinutes())}`];
   if (snapshot.flags & FLAG_SHORT_WINDOW) lines.push('показаны 7 дней');
-  if (snapshot.flags & FLAG_NO_OTHERS) lines.push('без чужой доступности');
+  if (noOthers()) lines.push('без чужой доступности');
   $('stamp').textContent = lines.join('\n');
 }
 
@@ -103,160 +131,186 @@ function renderStamp() {
 
 function renderSchedule() {
   const el = $('s-schedule');
-  el.innerHTML = '';
-  for (const d of days) {
-    const date = iso(d);
-    const sp = spans(date);
-    const gs = snapshot.games.filter((g) => g.date === date);
-    if (!sp.length && !gs.length) continue;
-    const day = document.createElement('div');
-    day.className = 'day';
-    day.innerHTML = `<h2>${WD[d.getDay()]} ${pad(d.getDate())}.${pad(d.getMonth() + 1)}</h2>`;
+  el.innerHTML = noOthers()
+    ? '<p class="note">Чужая доступность не поместилась в данные — видно только ваше время и игры.</p>'
+    : '';
+  days.forEach((d, i) => {
+    const date = snapshot.dates[i];
     const items = [
-      ...sp.map((s) => ({ t: s.start, kind: 'span', s })),
-      ...gs.map((g) => ({ t: g.start ?? Infinity, kind: 'game', g })), // без времени — в конце дня
+      ...spans(date).map((s) => ({ t: s.start, rows: spanRows(date, s) })),
+      ...snapshot.games.filter((g) => g.date === date).map((g) => ({ t: g.start ?? Infinity, rows: gameRows(g) })), // без времени — в конце дня
     ].sort((a, b) => a.t - b.t);
-    for (const it of items) {
-      const row = document.createElement('div');
-      const det = document.createElement('div');
-      det.className = 'detail';
-      if (it.kind === 'span') {
-        row.className = 'row';
-        row.innerHTML = `<span class="t">${timeRange(it.s.start, it.s.end)}</span><span class="meta">свободны</span><span class="cnt">${it.s.ids.length} чел.</span><span class="chev">›</span>`;
-        det.innerHTML = it.s.ids
-          .map((p) => {
-            const own = slotsFor(p, date)
-              .filter(([s, e]) => s < it.s.end && e > it.s.start)
-              .map(([s, e]) => timeRange(s, e))
-              .join(', ');
-            return `<span class="chip"><b>${esc(nameOf(p))}</b><span>${own}</span></span>`;
-          })
-          .join('');
-      } else {
-        const g = it.g;
-        const lu = lineup(g);
-        const meName = nameOf(snapshot.me);
-        row.className = 'row game';
-        row.innerHTML = `<span class="t">${timeRange(g.start, g.end)}</span><span class="meta">🎾 ${esc(lu.slice(0, 4).join(' '))}${lu.length > 4 ? ' …' : ''}</span><span class="cnt">${Math.min(4, lu.length)}/4</span><span class="chev">›</span>`;
-        det.innerHTML =
-          `<div class="card"><div class="line"><span>📍 ${esc(g.court || 'Корт не указан')}</span><span>${g.booked ? '✅ бронь' : '⚠️ нет брони'}</span></div>` +
-          lu.slice(0, 4).map((n) => `<div class="line ${n.startsWith(meName) ? 'me' : ''}"><span>${esc(n)}</span><span>✅</span></div>`).join('') +
-          (lu.length > 4 ? `<div class="reserve">🕓 Резерв: ${esc(lu.slice(4).join(', '))}</div>` : '') +
-          // TODO(Task 8): резерв — ещё и g.waiting; кнопки по составу и правилам бота
-          `<div class="actions">${g.yes.includes(snapshot.me) ? '<button class="btn ghost" data-op="no">Откажусь</button>' : '<button class="btn" data-op="yes">Играю</button>'}<button class="btn ghost" data-op="gplus">+1</button></div></div>`;
-      }
-      row.onclick = () => row.classList.toggle('open');
-      det.querySelectorAll('[data-op]').forEach((b) => {
-        b.onclick = (e) => {
-          e.stopPropagation();
-          pending('game', { id: it.g.id, op: b.dataset.op });
-        };
-      });
-      day.append(row, det);
-    }
+    if (!items.length) return;
+    const day = node('div', 'day', `<h2>${dayTitle(d)}</h2>`);
+    day.firstChild.onclick = () => {
+      // тап по дню раскрывает все его строки (или сворачивает, если раскрыты все)
+      const rows = [...day.querySelectorAll('.row')];
+      const open = rows.some((r) => !r.classList.contains('open'));
+      rows.forEach((r) => r.classList.toggle('open', open));
+    };
+    for (const it of items) day.append(...it.rows);
     el.appendChild(day);
-  }
-  if (!el.children.length) el.innerHTML = '<p class="empty">На эти дни пока никто не отметился.</p>';
+  });
+  if (!el.querySelector('.day')) el.insertAdjacentHTML('beforeend', '<p class="empty">На эти дни пока никто не отметился.</p>');
+}
+
+/** Отрезок «свободны» и раскрытие: кто именно и в какие часы. */
+function spanRows(date, s) {
+  const me = snapshot.me;
+  const onlyMe = s.ids.length === 1 && s.ids[0] === me;
+  const row = node(
+    'div',
+    'row',
+    `<span class="t">${timeRange(s.start, s.end)}</span><span class="meta">${onlyMe ? 'только вы' : 'свободны'}</span><span class="cnt">${s.ids.length} чел.</span><span class="chev">›</span>`,
+  );
+  const chips = s.ids.map((id) => {
+    const own = toSlots(freeCells(snapshot, id, date))
+      .filter(([a, b]) => a < s.end && b > s.start)
+      .map(([a, b]) => timeRange(a, b))
+      .join(', ');
+    const mark = id === me ? ' me' : '';
+    return `<span class="chip${mark}"><b>${esc(nameOf(id))}</b>${mark ? '<i>вы</i>' : ''}<span>${own}</span></span>`;
+  });
+  row.onclick = () => row.classList.toggle('open');
+  return [row, node('div', 'detail', chips.join(''))];
+}
+
+/** Игра: строка дня и карточка с составом, резервом, ожидающими и кнопками по составу. */
+function gameRows(g) {
+  const me = snapshot.me;
+  const lu = lineup(g);
+  const main = lu.slice(0, 4);
+  const reserve = lu.slice(4);
+  const playing = g.yes.includes(me);
+  const myGuests = g.guests.some(([host, count]) => host === me && count > 0);
+  const row = node(
+    'div',
+    'row game',
+    `<span class="t">${timeRange(g.start, g.end)}</span><span class="meta">🎾 ${esc(main.map((e) => e.label).join(' '))}${reserve.length ? ' …' : ''}</span><span class="cnt">${main.length}/4</span><span class="chev">›</span>`,
+  );
+  let waiting = '';
+  if (snapshot.flags & FLAG_NO_WAITING) waiting = '<div class="reserve">❓ Список ожидающих не передан — он есть на карточке в чате</div>';
+  else if (g.waiting.length) waiting = `<div class="reserve">❓ Требуется подтверждение: ${esc(g.waiting.map(nameOf).join(', '))}</div>`;
+  const buttons = [
+    playing ? ['no', 'Не играю', 'ghost'] : ['yes', 'Играю', ''],
+    ...(playing ? [['gplus', '+1', 'ghost']] : []),
+    ...(myGuests ? [['gminus', '−1', 'ghost']] : []),
+  ];
+  const det = node(
+    'div',
+    'detail',
+    `<div class="card"><div class="line"><span>📍 ${esc(g.court || 'Корт не указан')}</span><span>${g.booked ? '✅ бронь' : '⚠️ нет брони'}</span></div>` +
+      (main.length
+        ? main.map((e) => `<div class="line${e.host === me ? ' me' : ''}"><span>${esc(e.label)}</span><span>✅</span></div>`).join('')
+        : '<div class="line"><span class="empty">Пока никто не записался</span></div>') +
+      (reserve.length ? `<div class="reserve">🕓 Резерв: ${esc(reserve.map((e) => e.label).join(', '))}</div>` : '') +
+      waiting +
+      `<div class="actions">${buttons.map(([op, text, cls]) => `<button class="btn ${cls}" data-op="${op}">${text}</button>`).join('')}</div></div>`,
+  );
+  row.onclick = () => row.classList.toggle('open');
+  det.querySelectorAll('[data-op]').forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      act(() => buildGameOp(snapshot, g.id, b.dataset.op));
+    };
+  });
+  return [row, det];
 }
 
 // ------------------------------------------------------------------ экран 2: сетка «Моё время»
 
 let week = 0;
-let mine = {}; // date → Set('минуты:free' | 'минуты:rule')
-let changed = new Set(); // 'date' и 'date:минуты' изменённых ячеек
+let origin = new Map(); // дата → {free, rule}: получасы me в срезе (цвет ячеек и «не сохранено»)
+let mine = new Map(); // дата → закрашенные получасы; правит сетка, «Отменить» возвращает срез
 let painting = null;
 let lastPaint = null;
 const weeks = () => Math.ceil(days.length / 7);
 
 function initMine() {
-  mine = {};
-  for (const d of days) {
-    const date = iso(d);
-    mine[date] = new Set();
-    for (const [s, e, kind] of slotsFor(snapshot.me, date)) {
-      for (let m = s; m < e; m += SLOT_STEP) mine[date].add(`${m}:${kind}`);
-    }
-  }
+  origin = new Map(
+    snapshot.dates.map((date, i) => {
+      const day = snapshot.availability[snapshot.me]?.[i];
+      return [date, { free: halfHours(day?.free ?? []), rule: halfHours(day?.rule ?? []) }];
+    }),
+  );
+  mine = new Map(snapshot.dates.map((date) => [date, painted(snapshot, date)]));
 }
 
+/** Своя игра (me в «да»), задевающая получас m. */
 function myGameAt(date, m) {
   return snapshot.games.find(
-    (g) => g.date === date && g.yes.includes(snapshot.me) && g.start !== null && g.start <= m && m < g.end,
+    (g) => g.date === date && g.yes.includes(snapshot.me) && g.start !== null && g.start < m + SLOT_STEP && m < g.end,
   );
 }
 
+/** Прошедшие получасы и свои игры не редактируются. */
+const locked = (date, m, now = new Date()) => isPast(snapshot, date, m, now) || Boolean(myGameAt(date, m));
+
 function renderGrid() {
+  const now = new Date();
   const g = $('grid');
   g.innerHTML = '';
   const shown = days.slice(week * 7, week * 7 + 7);
   const first = shown[0];
   const last = shown[shown.length - 1];
-  $('range').innerText = `${first.getDate()}.${pad(first.getMonth() + 1)} – ${last.getDate()}.${pad(last.getMonth() + 1)}`;
-  g.appendChild(Object.assign(document.createElement('div'), { className: 'hd' }));
-  const today = iso(new Date());
+  g.style.gridTemplateColumns = `44px repeat(${shown.length}, 1fr)`;
+  $('range').textContent = `${first.getDate()}.${pad(first.getMonth() + 1)} – ${last.getDate()}.${pad(last.getMonth() + 1)}`;
+  $('prev').disabled = week === 0;
+  $('next').disabled = week >= weeks() - 1;
+  g.appendChild(node('div', 'hd', ''));
   for (const d of shown) {
-    const h = document.createElement('div');
-    h.className = 'hd' + (iso(d) === today ? ' today' : '');
-    h.innerHTML = `${WD[d.getDay()]}<b>${d.getDate()}</b>`;
-    g.appendChild(h);
+    g.appendChild(node('div', 'hd' + (iso(d) === snapshot.dates[0] ? ' today' : ''), `${WD[d.getDay()]}<b>${d.getDate()}</b>`));
   }
   for (let m = SLOT_START; m < SLOT_END; m += SLOT_STEP) {
-    const t = document.createElement('div');
-    t.className = 'tm' + (m % 60 === 0 ? ' hour' : '');
+    const t = node('div', 'tm' + (m % 60 === 0 ? ' hour' : ''), '');
     t.textContent = m % 60 === 0 ? tm(m) : '';
     g.appendChild(t);
     for (const d of shown) {
       const date = iso(d);
-      const c = document.createElement('div');
-      c.className = 'cell' + (m % 60 === 0 ? ' hour' : '');
+      const { free, rule } = origin.get(date);
+      const on = mine.get(date).has(m);
+      const c = node('div', 'cell' + (m % 60 === 0 ? ' hour' : ''), '');
       c.dataset.date = date;
       c.dataset.m = m;
-      if (isPast(date, m)) c.classList.add('past');
+      const past = isPast(snapshot, date, m, now);
+      if (past) c.classList.add('past');
       const game = myGameAt(date, m);
       if (game) {
         c.classList.add('game');
-        if (game.start === m) {
+        if (m === Math.max(SLOT_START, game.start - ((game.start - SLOT_START) % SLOT_STEP))) {
           c.classList.add('first');
-          c.dataset.label = '🎾 ' + (game.court || 'игра').split(',')[0];
+          c.dataset.label = '🎾 ' + (game.court || 'игра').split(',')[0]; // атрибут для CSS attr(), не HTML
         }
-      } else if (mine[date].has(`${m}:free`)) c.classList.add('free');
-      else if (mine[date].has(`${m}:rule`)) c.classList.add('rule');
-      if (changed.has(`${date}:${m}`)) c.classList.add('changed');
+      } else if (on) c.classList.add(rule.has(m) && !free.has(m) ? 'rule' : 'free');
+      if (!past && !game && on !== (free.has(m) || rule.has(m))) c.classList.add('changed');
       g.appendChild(c);
     }
   }
 }
 
-function applyPaint(date, m) {
-  const set = mine[date];
-  if (painting) set.add(`${m}:free`);
-  else set.delete(`${m}:free`);
-  set.delete(`${m}:rule`);
-  changed.add(`${date}:${m}`);
-  changed.add(date);
-}
-
 function paint(cell) {
-  if (!cell || !cell.classList.contains('cell') || cell.classList.contains('past') || cell.classList.contains('game')) return;
+  if (!cell || !cell.classList.contains('cell')) return;
   const date = cell.dataset.date;
   const m = +cell.dataset.m;
-  const set = mine[date];
-  if (painting === null) painting = !(set.has(`${m}:free`) || set.has(`${m}:rule`));
-  if (lastPaint && lastPaint.date === date) {
-    // протяжка: заполняем промежуток между прошлой и текущей ячейкой
-    const [a, b] = lastPaint.m < m ? [lastPaint.m, m] : [m, lastPaint.m];
-    for (let x = a; x <= b; x += SLOT_STEP) applyPaint(date, x);
-  } else applyPaint(date, m);
+  if (locked(date, m)) return;
+  const set = mine.get(date);
+  if (painting === null) painting = !set.has(m);
+  // протяжка: заполняем промежуток между прошлой и текущей ячейкой, минуя закрытые
+  const [a, b] = lastPaint?.date === date ? [Math.min(lastPaint.m, m), Math.max(lastPaint.m, m)] : [m, m];
+  for (let x = a; x <= b; x += SLOT_STEP) {
+    if (locked(date, x)) continue;
+    if (painting) set.add(x);
+    else set.delete(x);
+  }
   lastPaint = { date, m };
   renderGrid();
   updateSave();
 }
 
-const changedDays = () => [...changed].filter((k) => !k.includes(':'));
-
+/** Панель «Сохранить» — только на экране «Моё время» и только когда есть изменённые дни. */
 function updateSave() {
-  const n = changedDays().length;
-  $('savebar').hidden = !n;
+  const n = desiredDays(snapshot, mine, new Date()).length;
+  $('savebar').hidden = !n || !$('s-mine').classList.contains('active');
   $('save').textContent = `Сохранить · ${n} ${n === 1 ? 'день' : n < 5 ? 'дня' : 'дней'}`;
 }
 
@@ -264,45 +318,67 @@ function updateSave() {
 
 let gdate = null;
 
+/** Самое раннее начало игры на дату: у сегодня — ближайший не начавшийся получас. */
+const firstStart = (date) =>
+  date === snapshot.dates[0] ? Math.max(SLOT_START, Math.ceil(dayMinutes(new Date()) / SLOT_STEP) * SLOT_STEP) : SLOT_START;
+
+/** Варианты времени с шагом 30 минут; выбранное сохраняется, если оно ещё в диапазоне. */
+function fillTimes(select, from, to, fallback) {
+  const keep = select.value === '' ? NaN : +select.value;
+  select.innerHTML = '';
+  for (let m = from; m <= to; m += SLOT_STEP) select.add(new Option(tm(m), m));
+  select.value = String(keep >= from && keep <= to ? keep : Math.min(Math.max(fallback, from), to));
+}
+
 function renderGame() {
+  const open = snapshot.dates.filter((date) => firstStart(date) < SLOT_END); // сегодня после 22:30 — уже нельзя
+  if (!open.includes(gdate)) gdate = open[0] ?? null;
   const dd = $('gdates');
   dd.innerHTML = '';
-  for (const d of days) {
-    const b = document.createElement('button');
-    b.innerHTML = `${WD[d.getDay()]}<b>${d.getDate()}</b>`;
-    if (iso(d) === gdate) b.classList.add('sel');
+  days.forEach((d, i) => {
+    const date = snapshot.dates[i];
+    if (!open.includes(date)) return;
+    const b = node('button', date === gdate ? 'sel' : '', `${WD[d.getDay()]}<b>${d.getDate()}</b>`);
     b.onclick = () => {
-      gdate = iso(d);
+      gdate = date;
       renderGame();
     };
     dd.appendChild(b);
+  });
+  $('gcreate').disabled = !gdate;
+  if (!gdate) {
+    $('gwho').innerHTML = '<span class="empty">В этих данных не осталось дней для новой игры</span>';
+    return;
   }
   const s = $('gstart');
   const e = $('gend');
-  if (!s.options.length) {
-    for (let m = SLOT_START; m <= SLOT_END; m += 60) {
-      s.add(new Option(tm(m), m));
-      e.add(new Option(tm(m), m));
-    }
-    s.value = 1080;
-    e.value = 1200;
+  fillTimes(s, firstStart(gdate), SLOT_END - SLOT_STEP, 18 * 60);
+  fillTimes(e, +s.value + SLOT_STEP, SLOT_END, +s.value + 120);
+  if (noOthers()) {
+    $('gwho').innerHTML = '<span class="empty">Неизвестно: чужая доступность не поместилась в данные</span>';
+    return;
   }
-  const [a, b] = [+s.value, +e.value];
-  const ids = playerIds().filter((p) => p !== snapshot.me && slotsFor(p, gdate).some(([x, y]) => x <= a && y >= b));
+  const need = [];
+  for (let m = +s.value; m < +e.value; m += SLOT_STEP) need.push(m);
+  const ids = playerIds().filter((id) => {
+    if (id === snapshot.me) return false;
+    const cells = freeCells(snapshot, id, gdate);
+    return need.every((m) => cells.has(m));
+  });
   $('gwho').innerHTML = ids.length
-    ? ids.map((p) => `<span class="chip"><b>${esc(nameOf(p))}</b></span>`).join('')
+    ? ids.map((id) => `<span class="chip"><b>${esc(nameOf(id))}</b></span>`).join('')
     : '<span class="empty">Пока никто не отметил это время</span>';
 }
 
 // ------------------------------------------------------------------ общее
 
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms = 2600) {
   const t = $('toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+  toastTimer = setTimeout(() => t.classList.remove('show'), ms);
 }
 
 function bindUi() {
@@ -321,15 +397,14 @@ function bindUi() {
     painting = null;
     lastPaint = null;
   });
-  $('save').onclick = () => {
-    pending('set_availability', { days: changedDays() }); // TODO(Task 8): desiredDays из payload.js
-    changed = new Set();
-    renderGrid();
-    updateSave();
-  };
+  $('save').onclick = () =>
+    act(() => {
+      const changed = desiredDays(snapshot, mine, new Date());
+      if (!changed.length) throw new Error('Изменений нет');
+      return buildSetAvailability(snapshot, changed);
+    });
   $('undo').onclick = () => {
     initMine();
-    changed = new Set();
     renderGrid();
     updateSave();
   };
@@ -349,7 +424,7 @@ function bindUi() {
     $(id).onchange = renderGame;
   });
   $('gcreate').onclick = () =>
-    pending('create_game', { date: gdate, start: +$('gstart').value, end: +$('gend').value, court: $('gcourt').value.trim() });
+    act(() => buildCreateGame(snapshot, { date: gdate, start: +$('gstart').value, end: +$('gend').value, court: $('gcourt').value }));
 
   const titles = { schedule: 'Расписание', mine: 'Моё время', game: 'Новая игра' };
   document.querySelectorAll('.tabs button').forEach((b) => {
@@ -357,10 +432,12 @@ function bindUi() {
       document.querySelectorAll('.tabs button').forEach((x) => x.classList.toggle('active', x === b));
       document.querySelectorAll('.screen').forEach((s) => s.classList.toggle('active', s.id === 's-' + b.dataset.s));
       $('title').textContent = titles[b.dataset.s];
-      $('savebar').hidden = b.dataset.s !== 'mine' || !changedDays().length;
+      if (b.dataset.s === 'mine') renderGrid(); // прошедшие получасы могли добавиться
+      if (b.dataset.s === 'game') renderGame();
+      updateSave();
     };
   });
-  $('refresh').onclick = () => pending('refresh');
+  $('refresh').onclick = () => act(() => buildRefresh(snapshot));
 }
 
 /** Страница без среза (открыта не из бота или срез битый): короткая подсказка вместо экранов. */
@@ -392,13 +469,18 @@ async function main() {
   }
   days = snapshot.dates.map(fromIso);
   names = new Map(snapshot.players.map((p) => [p.id, p.name]));
-  gdate = iso(days[Math.min(1, days.length - 1)]);
-  bindUi();
-  renderStamp();
-  initMine();
-  renderSchedule();
-  renderGrid();
-  renderGame();
+  gdate = snapshot.dates[Math.min(1, snapshot.dates.length - 1)];
+  try {
+    bindUi();
+    renderStamp();
+    initMine();
+    renderSchedule();
+    renderGrid();
+    renderGame();
+  } catch (error) {
+    console.error('экраны не отрисованы:', error);
+    showNotice('Не получилось показать календарь. Откройте его из бота заново.');
+  }
 }
 
 main();

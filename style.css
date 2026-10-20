@@ -27,7 +27,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 
 /* --- Расписание --- */
 .day { margin-bottom: 14px; }
-.day h2 { font-size: 14px; color: var(--hint); font-weight: 600; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .02em; }
+.day h2 { font-size: 14px; color: var(--hint); font-weight: 600; margin: 0 0 6px; text-transform: uppercase; letter-spacing: .02em; cursor: pointer; }
 .row { background: var(--bg2); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .row .t { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 92px; }
 .row .meta { flex: 1; color: var(--text); }
@@ -40,6 +40,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 .row.open + .detail { display: block; }
 .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg2); border-radius: 999px; padding: 5px 10px; margin: 3px 4px 3px 0; font-size: 13px; }
 .chip b { font-weight: 600; } .chip span { color: var(--hint); font-variant-numeric: tabular-nums; }
+.chip.me { background: var(--free); } .chip i { font-style: normal; font-size: 11px; color: var(--link); }
 .card { background: var(--bg2); border-radius: 12px; padding: 10px 12px; }
 .card .line { display: flex; justify-content: space-between; padding: 3px 0; }
 .card .line.me { font-weight: 600; }
@@ -48,6 +49,8 @@ main { flex: 1; padding: 10px 12px 90px; }
 .btn { border: 0; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 600; background: var(--btn); color: var(--btn-text); }
 .btn.ghost { background: var(--bg); color: var(--link); border: 1px solid #d7dbe0; }
 .empty { color: var(--hint); padding: 8px 2px; }
+.note { color: var(--hint); font-size: 13px; background: var(--bg2); border-radius: 10px; padding: 8px 12px; margin: 0 0 10px; }
+.btn:disabled, .weeknav button:disabled { opacity: .4; }
 
 /* --- Моё время --- */
 .weeknav { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
@@ -86,7 +89,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 .times { display: flex; gap: 8px; align-items: center; }
 select, input[type=text] { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d7dbe0; background: var(--bg); color: var(--text); }
 .who { margin-top: 8px; }
-.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; max-width: 90%; }
+.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; max-width: 90%; overflow-wrap: anywhere; }
 .toast.show { opacity: .95; }
 
 /* --- Каркас страницы --- */
