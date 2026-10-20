@@ -290,6 +290,70 @@ function renderGrid() {
   }
 }
 
+// Жесты на сетке. Мышь красит сразу. Палец: свайп листает страницу, короткое нажатие
+// отмечает одну клетку, удержание LONG_PRESS мс без движения включает закраску протяжкой —
+// иначе на телефоне сетку невозможно пролистать (любое касание красило).
+const LONG_PRESS = 350; // мс
+const TAP_SLOP = 8; // px — дальше этого палец «поехал», значит это прокрутка
+let touch = null; // { cell, x, y, id, timer, mode: 'pending' | 'paint' | 'scroll' }
+
+function bindGridGestures(grid) {
+  const finish = (e) => {
+    if (e.pointerType !== 'mouse' && touch) {
+      clearTimeout(touch.timer);
+      if (touch.mode === 'pending' && e.type === 'pointerup') paint(touch.cell); // тап
+      touch = null;
+    }
+    painting = null;
+    lastPaint = null;
+  };
+  grid.addEventListener('pointerdown', (e) => {
+    painting = null;
+    lastPaint = null;
+    if (e.pointerType === 'mouse') {
+      paint(e.target);
+      return;
+    }
+    const cell = e.target.closest?.('.cell');
+    if (!cell) return;
+    touch = { cell, x: e.clientX, y: e.clientY, id: e.pointerId, mode: 'pending', timer: 0 };
+    touch.timer = setTimeout(() => {
+      if (!touch || touch.mode !== 'pending') return;
+      touch.mode = 'paint';
+      try {
+        grid.setPointerCapture(touch.id);
+      } catch {
+        /* старые WebView без захвата указателя — закраска всё равно работает */
+      }
+      window.Telegram?.WebApp?.HapticFeedback?.impactOccurred?.('light');
+      paint(touch.cell);
+    }, LONG_PRESS);
+  });
+  grid.addEventListener('pointermove', (e) => {
+    if (e.pointerType === 'mouse') {
+      if (e.buttons !== 1 || painting === null) return;
+      paint(document.elementFromPoint(e.clientX, e.clientY));
+      return;
+    }
+    if (!touch) return;
+    if (touch.mode === 'pending') {
+      if (Math.hypot(e.clientX - touch.x, e.clientY - touch.y) > TAP_SLOP) {
+        touch.mode = 'scroll';
+        clearTimeout(touch.timer);
+      }
+      return;
+    }
+    if (touch.mode === 'paint') paint(document.elementFromPoint(e.clientX, e.clientY));
+  });
+  window.addEventListener('pointerup', finish);
+  window.addEventListener('pointercancel', finish);
+  // Пока идёт закраска, не отдаём жест прокрутке страницы (слушатель обязан быть не passive).
+  grid.addEventListener('touchmove', (e) => {
+    if (touch?.mode === 'paint') e.preventDefault();
+  }, { passive: false });
+  grid.addEventListener('contextmenu', (e) => e.preventDefault()); // долгое нажатие — не меню
+}
+
 function paint(cell) {
   if (!cell || !cell.classList.contains('cell')) return;
   const date = cell.dataset.date;
@@ -384,21 +448,7 @@ function toast(msg, ms = 2600) {
 }
 
 function bindUi() {
-  const grid = $('grid');
-  grid.addEventListener('pointerdown', (e) => {
-    painting = null;
-    lastPaint = null;
-    paint(e.target);
-  });
-  grid.addEventListener('pointermove', (e) => {
-    if (e.buttons !== 1 && e.pointerType === 'mouse') return;
-    if (painting === null) return;
-    paint(document.elementFromPoint(e.clientX, e.clientY));
-  });
-  window.addEventListener('pointerup', () => {
-    painting = null;
-    lastPaint = null;
-  });
+  bindGridGestures($('grid'));
   $('save').onclick = () =>
     act(() => {
       const changed = desiredDays(snapshot, mine);

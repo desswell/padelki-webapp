@@ -66,7 +66,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 .grid .tm { font-size: 11px; color: var(--hint); text-align: right; padding-right: 6px; height: var(--cell-h); line-height: var(--cell-h); border-right: 1px solid #e6e8ec; font-variant-numeric: tabular-nums; }
 .grid .tm.hour { border-top: 1px solid #e6e8ec; }
 /* жест по ячейке рисует; по колонке времени и заголовкам дней — листает страницу */
-.cell { height: var(--cell-h); border-right: 1px solid #f0f1f3; border-bottom: 1px dashed #f0f1f3; position: relative; touch-action: none; }
+.cell { height: var(--cell-h); border-right: 1px solid #f0f1f3; border-bottom: 1px dashed #f0f1f3; position: relative; touch-action: pan-y; -webkit-touch-callout: none; }
 .cell.hour { border-top: 1px solid #e6e8ec; }
 .cell.free { background: var(--free); }
 .cell.rule { background: var(--rule); }

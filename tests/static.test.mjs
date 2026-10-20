@@ -12,11 +12,18 @@ function rule(css, selector) {
   return match[1];
 }
 
-test('сетка «Моё время» листается пальцем: touch-action: none только у ячеек', async () => {
-  // у .grid он запрещал прокрутку всем потомкам — и колонке времени, и заголовкам дней
+test('сетка «Моё время» листается пальцем: ячейки разрешают вертикальный свайп', async () => {
+  // touch-action: none на ячейках красил при любом касании и не давал пролистать сетку
   const css = await source('style.css');
-  assert.match(rule(css, '.cell'), /touch-action:\s*none/);
+  assert.match(rule(css, '.cell'), /touch-action:\s*pan-y/);
   assert.doesNotMatch(rule(css, '.grid'), /touch-action/);
+});
+
+test('закраска пальцем — только после удержания, прокрутка на время закраски блокируется', async () => {
+  const js = await source('app.js');
+  assert.match(js, /const LONG_PRESS = \d+/);
+  assert.match(js, /pointercancel/);
+  assert.match(js, /touchmove[\s\S]*passive:\s*false/);
 });
 
 test('свайп вниз не сворачивает приложение: disableVerticalSwipes, если клиент его знает', async () => {
