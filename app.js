@@ -17,6 +17,7 @@ import {
   buildSetAvailability,
   dayMinutes,
   desiredDays,
+  effectiveCells,
   freeCells,
   halfHours,
   isPast,
@@ -72,11 +73,12 @@ function lineup(game) {
 }
 
 /**
- * Отрезки дня, на которых свободен один и тот же набор игроков: у чужих — эффективная
- * доступность (free ∪ rule из среза), у `me` — объявленная; `me` помечается при показе.
+ * Отрезки дня, на которых свободен один и тот же набор игроков. У всех — эффективная доступность
+ * (effectiveCells): у чужих это free ∪ rule из среза, у `me` — объявленная минус свои игры со
+ * временем (иначе `me` «свободен» во время своей игры); `me` помечается при показе.
  */
 function spans(date) {
-  const cells = playerIds().map((id) => [id, freeCells(snapshot, id, date)]);
+  const cells = playerIds().map((id) => [id, effectiveCells(snapshot, id, date)]);
   const out = [];
   for (let m = SLOT_START; m < SLOT_END; m += SLOT_STEP) {
     const ids = cells.filter(([, set]) => set.has(m)).map(([id]) => id);
@@ -164,7 +166,7 @@ function spanRows(date, s) {
     `<span class="t">${timeRange(s.start, s.end)}</span><span class="meta">${onlyMe ? 'только вы' : 'свободны'}</span><span class="cnt">${s.ids.length} чел.</span><span class="chev">›</span>`,
   );
   const chips = s.ids.map((id) => {
-    const own = toSlots(freeCells(snapshot, id, date))
+    const own = toSlots(effectiveCells(snapshot, id, date))
       .filter(([a, b]) => a < s.end && b > s.start)
       .map(([a, b]) => timeRange(a, b))
       .join(', ');

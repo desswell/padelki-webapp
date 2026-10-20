@@ -7,6 +7,8 @@ import {
   buildRefresh,
   buildSetAvailability,
   desiredDays,
+  effectiveCells,
+  freeCells,
   MAX_BYTES,
 } from '../payload.js';
 
@@ -100,6 +102,52 @@ test('вся сетка закрашена — один интервал 07:00�
 test('день вне среза — ошибка', () => {
   const edited = new Map([['2026-11-03', new Set([420])]]);
   assert.throws(() => desiredDays(snapshot(), edited, MORNING), Error);
+});
+
+// ------------------------------------------------------------------ effectiveCells
+
+// 2026-10-22: у me (id 1) объявлено 18:00–20:00; игры дня подставляются в каждом тесте
+const GAME_DAY = '2026-10-22';
+const withGames = (...games) => {
+  const snap = snapshot();
+  snap.games = games.map((g, i) => ({
+    id: 900 + i, date: GAME_DAY, start: null, end: null, court: '', booked: false,
+    creator: null, yes: [], guests: [], waiting: [], ...g,
+  }));
+  return snap;
+};
+const sorted = (set) => [...set].sort((a, b) => a - b);
+
+test('effectiveCells: своя игра со временем вычитается из своей доступности', () => {
+  const snap = withGames({ start: 1080, end: 1140, yes: [1, 3] });
+  assert.deepEqual(sorted(freeCells(snap, 1, GAME_DAY)), [1080, 1110, 1140, 1170]); // срез — объявленная
+  assert.deepEqual(sorted(effectiveCells(snap, 1, GAME_DAY)), [1140, 1170]);
+});
+
+test('effectiveCells: игра, где me только в ожидающих, не вычитается', () => {
+  const snap = withGames({ start: 1080, end: 1200, yes: [3], waiting: [1] });
+  assert.deepEqual(sorted(effectiveCells(snap, 1, GAME_DAY)), [1080, 1110, 1140, 1170]);
+});
+
+test('effectiveCells: игра без времени не вычитается', () => {
+  const snap = withGames({ yes: [1] });
+  assert.deepEqual(sorted(effectiveCells(snap, 1, GAME_DAY)), [1080, 1110, 1140, 1170]);
+});
+
+test('effectiveCells: игры других дней не вычитаются', () => {
+  const snap = withGames({ date: '2026-10-21', start: 1080, end: 1200, yes: [1] });
+  assert.deepEqual(sorted(effectiveCells(snap, 1, GAME_DAY)), [1080, 1110, 1140, 1170]);
+});
+
+test('effectiveCells: на векторе игра 101 (18:00–20:00, me в «да») закрывает весь свободный отрезок', () => {
+  assert.deepEqual(sorted(effectiveCells(snapshot(), 1, GAME_DAY)), []);
+});
+
+test('effectiveCells: чужая доступность в срезе уже эффективная и не меняется', () => {
+  const snap = withGames({ start: 420, end: 1380, yes: [1, 3, 5123456789] });
+  for (const id of [3, 5123456789]) {
+    for (const date of snap.dates) assert.deepEqual(sorted(effectiveCells(snap, id, date)), sorted(freeCells(snap, id, date)));
+  }
 });
 
 // ------------------------------------------------------------------ сборка сообщений

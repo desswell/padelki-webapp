@@ -43,6 +43,22 @@ export function freeCells(snapshot, id, date) {
   return day ? halfHours([...day.free, ...day.rule]) : new Set();
 }
 
+/**
+ * Получасы, когда игрок свободен на дату на самом деле — для «Расписания». Чужая доступность в
+ * срезе уже эффективная (бот вычел их игры); у `me` срез несёт объявленную (её правит сетка
+ * «Моё время»), поэтому здесь вычитаются получасы, задетые играми дня со временем, где `me` в «да».
+ * Игры без времени и игры, где `me` только в ожидающих, не вычитаются.
+ */
+export function effectiveCells(snapshot, id, date) {
+  const cells = freeCells(snapshot, id, date);
+  if (id !== snapshot.me) return cells;
+  for (const game of snapshot.games) {
+    if (game.date !== date || game.start === null || game.end === null || !game.yes.includes(id)) continue;
+    for (const m of [...cells]) if (game.start < m + SLOT_STEP && m < game.end) cells.delete(m);
+  }
+  return cells;
+}
+
 /** Получасы, закрашенные у `me` в срезе на дату. */
 export const painted = (snapshot, date) => freeCells(snapshot, snapshot.me, date);
 
