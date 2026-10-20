@@ -58,18 +58,13 @@ export function fromBase64Url(text) {
   return Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
 }
 
-async function inflateWithStream(bytes) {
-  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  return new Uint8Array(await new Response(stream).arrayBuffer());
-}
-
 // tiny-inflate пишет в буфер заданного размера и молча отбрасывает то, что не влезло, а размер
 // распакованного среза в payload не передаётся. Берём буфер с запасом (реальный срез — единицы
 // КБ; 255 игроков × 14 дней — около 40 КБ); заполненный до конца буфер может означать обрезку,
 // тогда распаковываем заново в вчетверо больший.
 const FALLBACK_MAX = 16 * 1024 * 1024;
 
-function inflateWithTiny(bytes) {
+export function inflateWithTiny(bytes) {
   for (let size = Math.max(64 * 1024, bytes.length * 20); size <= FALLBACK_MAX; size *= 4) {
     const out = tinfUncompress(bytes, new Uint8Array(size));
     if (out.length < size) return out;
@@ -77,16 +72,20 @@ function inflateWithTiny(bytes) {
   throw new Error('срез: распакованные данные больше 16 МБ');
 }
 
-/** Сырой deflate → байты: DecompressionStream('deflate-raw'), а где его нет — tiny-inflate. */
+/**
+ * Сырой deflate → байты: DecompressionStream('deflate-raw') (Chrome 103+, Safari 16.4+), а где
+ * его нет — tiny-inflate. Запасной путь — только когда поток нельзя создать; ошибка распаковки
+ * повреждённых данных в потоке отклоняет промис, а не уходит в tiny-inflate.
+ */
 export async function inflate(bytes) {
-  if (typeof DecompressionStream === 'function') {
-    try {
-      return await inflateWithStream(bytes); // Chrome 103+, Safari 16.4+
-    } catch {
-      // формата 'deflate-raw' нет (Node 20, старые WebView) или поток не справился
-    }
+  let decompressor;
+  try {
+    decompressor = new DecompressionStream('deflate-raw');
+  } catch {
+    return inflateWithTiny(bytes); // нет DecompressionStream или 'deflate-raw' (Node 20, старые WebView)
   }
-  return inflateWithTiny(bytes);
+  const stream = new Blob([bytes]).stream().pipeThrough(decompressor);
+  return new Uint8Array(await new Response(stream).arrayBuffer());
 }
 
 class Reader {

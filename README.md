@@ -60,5 +60,7 @@ cp tests/fixtures/snapshot_vector.json ../padelki-webapp/tests/vector.json
 Срез распаковывает `DecompressionStream('deflate-raw')` (Chrome 103+, Safari 16.4+). Где
 его нет — старые WebView и Node 20, на котором идут тесты, — работает
 `vendor/tiny-inflate.js`: [tiny-inflate](https://github.com/devongovett/tiny-inflate) 1.0.3
-Devon Govett под лицензией **MIT** (текст лицензии — в шапке файла), переведённый в ES-модуль
-без других изменений.
+Devon Govett под лицензией **MIT** (текст лицензии — в шапке файла), переведённый в ES-модуль,
+плюс одна строка защиты: на повреждённых данных он падает с `Data error`, а не зацикливается
+(изменения перечислены в шапке файла). Если поток `deflate-raw` есть, но данные повреждены,
+запасной путь не используется — страница показывает, что срез не прочитан.

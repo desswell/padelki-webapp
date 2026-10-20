@@ -7,9 +7,16 @@
  *          (shasum 122715494913a1805166aaf7c93467933eea26c4)
  *
  * Vendored for padelki-webapp as the fallback when the browser has no
- * DecompressionStream('deflate-raw'). Changes against the package's index.js:
- * this header, and `module.exports = tinf_uncompress` replaced with
- * `export default` on the function (ES module). The code is otherwise unchanged.
+ * DecompressionStream('deflate-raw').
+ *
+ * Changes against the package's index.js (the code is otherwise unchanged):
+ *  - this header;
+ *  - `module.exports = tinf_uncompress` replaced with `export default` on the
+ *    function (ES module);
+ *  - one guard line in tinf_decode_symbol: throw 'Data error' once the reader is
+ *    more than 4 bytes past the end of `source`. A valid stream never reads more
+ *    than 3 bytes ahead; damaged input (e.g. a truncated payload) used to loop
+ *    forever there and now fails fast.
  *
  * Usage: tinf_uncompress(source: Uint8Array, dest: Uint8Array) inflates `source`
  * into `dest` and returns the written part of `dest` (a slice when it is shorter).
@@ -197,6 +204,7 @@ function tinf_decode_symbol(d, t) {
     d.tag |= d.source[d.sourceIndex++] << d.bitcount;
     d.bitcount += 8;
   }
+  if (d.sourceIndex > d.source.length + 4) throw new Error('Data error');
   
   var sum = 0, cur = 0, len = 0;
   var tag = d.tag;
