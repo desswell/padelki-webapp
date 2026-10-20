@@ -6,15 +6,18 @@ import {
   buildGameOp,
   buildRefresh,
   buildSetAvailability,
+  courtsForGame,
   desiredDays,
   effectiveCells,
   freeCells,
   MAX_BYTES,
 } from '../payload.js';
 
-// Срез — `expected` общего вектора: ровно то, что возвращает decodePayload.
+// Срез — `expected` общего вектора (формат v2): ровно то, что возвращает decodePayload.
 // me = 1 (@ivan); 2026-10-20 (сегодня, первый день): free 18:00–19:00, rule 18:00–20:00 и 22:30–23:00;
 // 2026-10-22: free 18:00–20:00 и игра 101 18:00–20:00, где ivan в «да».
+// Корты на 2026-10-22: «Заряд Падел» — 18:00 на 60 и на 120 минут; «Падел Хаб Сколково» — 18:30 на 90
+// и 22:30 на 120. На 2026-10-23 свободных кортов нет.
 const vector = JSON.parse(await readFile(new URL('./vector.json', import.meta.url), 'utf8'));
 const snapshot = () => structuredClone(vector.expected);
 
@@ -238,4 +241,49 @@ test('сообщение длиннее 4096 байт — ошибка, ровн
 test('предел считается в байтах UTF-8, а не в символах', () => {
   const court = 'ж'.repeat(2100); // 2100 символов, 4200 байт
   assert.throws(() => buildCreateGame(snapshot(), { date: '2026-10-21', start: 1080, end: 1200, court }), /4096/);
+});
+
+// ------------------------------------------------------------------ courtsForGame
+
+test('courtsForGame объединяет классы не короче игры', () => {
+  const s = snapshot();
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1080, 1140), { state: 'ok', names: ['Заряд Падел'] });
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1080, 1200), { state: 'ok', names: ['Заряд Падел'] });
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1110, 1170), { state: 'ok', names: ['Падел Хаб Сколково'] });
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1080, 1260), { state: 'too_long', names: [] });
+  assert.deepEqual(courtsForGame(s, '2026-10-23', 1080, 1140), { state: 'none', names: [] });
+  assert.equal(courtsForGame({ ...s, flags: s.flags | 8, courts: { stamp: 0, clubs: [] } }, '2026-10-22', 1080, 1140).state, 'trimmed');
+  assert.equal(courtsForGame({ ...s, courts: { stamp: 0, clubs: [] } }, '2026-10-22', 1080, 1140).state, 'off');
+});
+
+test('courtsForGame: старт обязан совпасть, более длинный класс подходит, более короткий нет', () => {
+  const s = snapshot();
+  // Сколково: 90 минут с 18:30 — годится для игры на час и на полтора, но не на два часа
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1110, 1200).names, ['Падел Хаб Сколково']);
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1110, 1230), { state: 'none', names: [] });
+  // 120 минут с 22:30 — игра на полчаса тоже помещается
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1350, 1380).names, ['Падел Хаб Сколково']);
+  // Заряд, 18:00: класс на 60 минут не годится для игры на 90, но класс на 120 — годится
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1080, 1170).names, ['Заряд Падел']);
+  // 18:30 у Заряда нет ни в одном классе
+  assert.equal(courtsForGame(s, '2026-10-22', 1110, 1140).names.includes('Заряд Падел'), false);
+});
+
+test('courtsForGame: клубы идут в порядке среза, каждый один раз', () => {
+  const s = snapshot();
+  s.courts.clubs[1].days[2][90].push(1080); // у Сколково тоже появился старт 18:00
+  s.courts.clubs[1].days[2][120].push(1080); // и в двух классах сразу
+  assert.deepEqual(courtsForGame(s, '2026-10-22', 1080, 1140).names, ['Заряд Падел', 'Падел Хаб Сколково']);
+});
+
+test('courtsForGame: «обрезано» важнее «нет клубов», а слишком длинная игра — важнее поиска', () => {
+  const s = snapshot();
+  assert.equal(courtsForGame({ ...s, flags: s.flags | 8 }, '2026-10-22', 1080, 1140).state, 'trimmed');
+  assert.equal(courtsForGame({ ...s, flags: s.flags | 8 }, '2026-10-22', 1080, 1260).state, 'trimmed');
+  assert.equal(courtsForGame({ ...s, courts: { stamp: 0, clubs: [] } }, '2026-10-22', 1080, 1260).state, 'off');
+  assert.equal(courtsForGame(s, '2026-10-22', 420, 1380).state, 'too_long');
+});
+
+test('courtsForGame: дата вне среза — «нет», а не ошибка', () => {
+  assert.deepEqual(courtsForGame(snapshot(), '2030-01-01', 1080, 1140), { state: 'none', names: [] });
 });

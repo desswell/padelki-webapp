@@ -7,14 +7,20 @@
 //   u16 ngames · {u32 id · u8 day · u16 start · u16 end (0xFFFF = нет) · u8 flags (bit0 booked)
 //     · u8 creator (0 = нет) · u8 len · utf8 court · u8 n · u8 yes… · u8 n · {u8 host · u8 count}…
 //     · u8 n · u8 waiting…}…
+//   версия 2 добавляет после игр секцию кортов (в версии 1 её нет — страница читает обе):
+//   u32 courts_stamp (unix-минуты, 0 — клубов нет) · u8 nclubs
+//     · {u8 len · utf8 name · для каждого дня: u32 m60 · u32 m90 · u32 m120}…
+//   бит i маски — у клуба есть свободный корт со стартом SLOT_START + 30·i на ровно 60/90/120 минут.
 // Ссылки на игроков (me, creator, yes, host, waiting) — индексы в таблице игроков с 1.
 // Общий тест-вектор: tests/vector.json (его пишет Python-тест бота).
 import tinfUncompress from './vendor/tiny-inflate.js';
 
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSIONS = [1, 2]; // читаются обе: в клавиатурах у людей остались кнопки со срезом v1
 export const FLAG_SHORT_WINDOW = 1; // окно урезано до 7 дней
 export const FLAG_NO_OTHERS = 2; // маски чужих игроков нулевые и значат «неизвестно», а не «занят»
 export const FLAG_NO_WAITING = 4; // у игр не передан список ожидающих
+export const FLAG_NO_COURTS = 8; // секция кортов не поместилась в срез и пуста: «нет клубов» ≠ «корты неизвестны»
+export const DURATIONS = [60, 90, 120]; // классы слотов, которые продают клубы, минуты
 export const SLOT_START = 420; // 07:00: бит i маски — получас SLOT_START + 30·i
 export const SLOT_END = 1380; // 23:00
 export const SLOT_STEP = 30;
@@ -38,6 +44,13 @@ export function maskToIntervals(mask) {
       runStart = -1;
     }
   }
+  return result;
+}
+
+/** Старты по маске: минуты от полуночи (`SLOT_START + 30·i`) для каждого установленного бита i, по возрастанию. */
+export function maskToStarts(mask) {
+  const result = [];
+  for (let i = 0; i < SLOTS; i++) if (((mask >>> i) & 1) === 1) result.push(SLOT_START + SLOT_STEP * i);
   return result;
 }
 
@@ -127,7 +140,7 @@ const isoDay = (daysFromEpoch) => new Date(EPOCH_MS + daysFromEpoch * DAY_MS).to
 export function unpack(bytes) {
   const r = new Reader(bytes);
   const version = r.u8();
-  if (version !== FORMAT_VERSION) throw new Error(`неподдерживаемая версия среза: ${version}`);
+  if (!FORMAT_VERSIONS.includes(version)) throw new Error(`неподдерживаемая версия среза: ${version}`);
   const flags = r.u8();
   const stamp = r.u32();
   const startDays = r.u16();
@@ -172,6 +185,20 @@ export function unpack(bytes) {
       waiting: playerList('waiting'),
     };
   });
+
+  // Версия 1 корты не несёт: «клубов нет», штамп 0.
+  const courts = { stamp: 0, clubs: [] };
+  if (version >= 2) {
+    courts.stamp = r.u32();
+    courts.clubs = Array.from({ length: r.u8() }, () => ({
+      name: r.str(),
+      days: Array.from({ length: days }, () => ({
+        60: maskToStarts(r.u32()),
+        90: maskToStarts(r.u32()),
+        120: maskToStarts(r.u32()),
+      })),
+    }));
+  }
   if (r.pos !== bytes.length) throw new Error(`срез: лишние байты в конце (${bytes.length - r.pos})`);
 
   return {
@@ -185,6 +212,7 @@ export function unpack(bytes) {
     players,
     availability,
     games,
+    courts,
   };
 }
 

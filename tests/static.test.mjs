@@ -38,3 +38,9 @@ test('тёмная тема: цвета только через токены, т
   assert.match(await source('index.html'), /dataset\.theme\s*=/);
   assert.match(await source('app.js'), /onEvent\?\.\('themeChanged'/);
 });
+
+test('«Корты в это время»: скрытая подпись реально исчезает, а блок стоит в форме «Игра»', async () => {
+  // `.form label { display: block }` перебивает встроенное [hidden] — без своего правила подпись осталась бы
+  assert.match(await source('style.css'), /^\.form label\[hidden\]\s*\{\s*display:\s*none/m);
+  assert.match(await source('index.html'), /id="gwho"[\s\S]*id="gcourts-label"[^>]*>[^<]*<\/label><div class="who" id="gcourts"><\/div>[\s\S]*id="gcreate"/);
+});

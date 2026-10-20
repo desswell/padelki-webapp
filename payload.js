@@ -1,7 +1,7 @@
 // Сообщения для бота: JSON для Telegram.WebApp.sendData. Чистые функции без DOM.
 // Контракт — padelbot/webapp/inbound.py в репозитории бота: {v: 1, t: штамп среза, action, …},
 // не больше 4096 байт UTF-8; минуты кратны 30 и лежат в 07:00–23:00, start < end.
-import { SLOT_END, SLOT_START, SLOT_STEP } from './codec.js';
+import { DURATIONS, FLAG_NO_COURTS, SLOT_END, SLOT_START, SLOT_STEP } from './codec.js';
 
 export const PROTOCOL_VERSION = 1;
 export const MAX_BYTES = 4096; // Telegram режет sendData на 4096 байтах
@@ -84,6 +84,29 @@ export function desiredDays(original, edited) {
     if (!same) out.push({ date, slots: toSlots(after) });
   }
   return out.sort((a, b) => original.dates.indexOf(a.date) - original.dates.indexOf(b.date));
+}
+
+/**
+ * Клубы, у которых на дату есть корт, подходящий игре `start`–`end`: старт совпадает с началом
+ * продаваемого слота, а его класс (60/90/120 минут) не короче игры — на часовую игру годится и
+ * слот на полтора часа. Состояние: `trimmed` — секция кортов не поместилась в срез, `off` — клубов
+ * в срезе нет, `too_long` — игра длиннее самого длинного слота, `none` — подходящих нет, `ok` —
+ * `names` (в порядке среза). Во всех остальных состояниях `names` пуст.
+ */
+export function courtsForGame(snapshot, date, start, end) {
+  const state = (name, names = []) => ({ state: name, names });
+  if (snapshot.flags & FLAG_NO_COURTS) return state('trimmed');
+  if (snapshot.courts.clubs.length === 0) return state('off');
+  const length = end - start;
+  if (length > Math.max(...DURATIONS)) return state('too_long');
+  const dayIndex = snapshot.dates.indexOf(date);
+  const names = snapshot.courts.clubs
+    .filter((club) => {
+      const day = club.days[dayIndex]; // вне среза dayIndex = −1 → undefined → корта нет
+      return Boolean(day) && DURATIONS.some((duration) => duration >= length && day[duration].includes(start));
+    })
+    .map((club) => club.name);
+  return names.length ? state('ok', names) : state('none');
 }
 
 // ------------------------------------------------------------------ сообщения

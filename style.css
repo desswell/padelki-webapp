@@ -111,6 +111,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 
 /* --- Игра --- */
 .form label { display: block; color: var(--hint); font-size: 12px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .02em; }
+.form label[hidden] { display: none; } /* display: block выше перебил бы атрибут hidden */
 .dates { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
 .dates button { border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 56px; font-size: 13px; color: var(--text); }
 .dates button b { display: block; font-size: 15px; }

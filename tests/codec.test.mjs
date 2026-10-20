@@ -9,6 +9,7 @@ import {
   inflate,
   intervalsToMask,
   maskToIntervals,
+  maskToStarts,
   SLOT_START,
   SLOT_STEP,
   unpack,
@@ -108,6 +109,24 @@ test('decodes the shared vector exactly', async () => {
   assert.deepEqual(await decodePayload(vector.payload), vector.expected);
 });
 
+test('вектор v2 читается целиком, включая корты', async () => {
+  const snapshot = await decodePayload(vector.payload);
+  assert.equal(snapshot.version, 2);
+  assert.equal(snapshot.courts.clubs.length, 2);
+  assert.deepEqual(snapshot, vector.expected);
+});
+
+test('v1 без секции кортов даёт пустые клубы', () => {
+  assert.deepEqual(unpack(syntheticRaw()).courts, { stamp: 0, clubs: [] }); // syntheticRaw пишет версию 1
+});
+
+test('maskToStarts', () => {
+  assert.deepEqual(maskToStarts((1 << 22) | (1 << 31)), [1080, 1350]);
+  assert.deepEqual(maskToStarts(0), []);
+  assert.deepEqual(maskToStarts(0b101), [420, 480]);
+  assert.deepEqual(maskToStarts(0xffffffff).length, 32);
+});
+
 test('mask helpers', () => {
   const evening = (0b1111 << 22) >>> 0; // 18:00–20:00: слоты 22..25
   assert.deepEqual(maskToIntervals(evening), [[1080, 1200]]);
@@ -164,9 +183,11 @@ test('unpack of node:zlib output matches the vector', () => {
 });
 
 test('unpack rejects an unknown format version', () => {
-  const bytes = rawBytes();
-  bytes[0] = 2;
-  assert.throws(() => unpack(bytes), /версия/);
+  for (const version of [0, 3]) {
+    const bytes = rawBytes();
+    bytes[0] = version;
+    assert.throws(() => unpack(bytes), /версия/, `версия ${version}`);
+  }
 });
 
 test('unpack rejects a player index outside the table', () => {
@@ -183,7 +204,7 @@ test('unpack rejects ids beyond Number.MAX_SAFE_INTEGER', () => {
 
 test('unpack rejects truncated and padded data', () => {
   const bytes = rawBytes();
-  assert.throws(() => unpack(bytes.subarray(0, bytes.length - 1)), RangeError);
+  assert.throws(() => unpack(bytes.subarray(0, bytes.length - 1)), RangeError); // обрыв внутри секции кортов
   const padded = new Uint8Array(bytes.length + 1);
   padded.set(bytes);
   assert.throws(() => unpack(padded), /лишние байты/);
@@ -269,6 +290,7 @@ test('player references resolve to real ids, not table indexes', () => {
       5: [{ free: [[1080, 1140]], rule: [] }],
       [BIG]: [{ free: [], rule: [[1350, 1380]] }],
     },
+    courts: { stamp: 0, clubs: [] },
     games: [
       {
         id: 0x102,
@@ -284,4 +306,64 @@ test('player references resolve to real ids, not table indexes', () => {
       },
     ],
   });
+});
+
+// Те же байты по раскладке v2 из шапки codec.js, собранные вручную, а не взятые у кодека бота:
+// секция кортов идёт сразу после игр, у каждого клуба на каждый день — три маски стартов.
+const V2_HEX = [
+  '02', // version
+  '00', // flags
+  '0a0b0c0d', // stamp
+  '0000', // start_date = 2020-01-01
+  '01', // days
+  '01', // me
+  '0001', // nplayers
+  '0000000000000005', // игрок 1: u64 id
+  '02', // len имени
+  '426f', // «Bo»
+  '00c00000', // free: слоты 22 и 23
+  '00000000', // rule
+  '0000', // ngames
+  '0000012c', // courts_stamp = 300
+  '02', // nclubs
+  '03', // len имени клуба
+  'd09a31', // «К1»
+  '00400000', // 60 минут: бит 22 → 18:00
+  '00000000', // 90 минут
+  '80000000', // 120 минут: бит 31 → 22:30
+  '02', // len имени клуба
+  '4142', // «AB»
+  '00000000', // 60 минут
+  '00000005', // 90 минут: биты 0 и 2 → 07:00 и 08:00
+  '00000000', // 120 минут
+].join('');
+const v2Bytes = () => new Uint8Array(Buffer.from(V2_HEX, 'hex'));
+
+test('unpack v2: секция кортов собрана вручную', () => {
+  const snapshot = unpack(v2Bytes());
+  assert.equal(snapshot.version, 2);
+  assert.deepEqual(snapshot.games, []);
+  assert.deepEqual(snapshot.courts, {
+    stamp: 300,
+    clubs: [
+      { name: 'К1', days: [{ 60: [1080], 90: [], 120: [1350] }] },
+      { name: 'AB', days: [{ 60: [], 90: [420, 480], 120: [] }] },
+    ],
+  });
+});
+
+test('unpack v2: обрыв и лишние байты в секции кортов', () => {
+  const bytes = v2Bytes();
+  assert.throws(() => unpack(bytes.subarray(0, bytes.length - 1)), RangeError);
+  assert.throws(() => unpack(bytes.subarray(0, bytes.length - 12)), RangeError); // нет масок второго клуба
+  const padded = new Uint8Array(bytes.length + 1);
+  padded.set(bytes);
+  assert.throws(() => unpack(padded), /лишние байты/);
+});
+
+test('unpack v2: срез без клубов — пустой список, но штамп читается', () => {
+  // заголовок 12 + игрок 11 + free/rule 8 + ngames 2 + courts_stamp 4 = 37 байт, дальше nclubs
+  const bytes = v2Bytes().slice(0, 38);
+  bytes[37] = 0;
+  assert.deepEqual(unpack(bytes).courts, { stamp: 300, clubs: [] });
 });

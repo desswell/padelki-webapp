@@ -19,7 +19,7 @@
     const response = await fetch('tests/vector.json', { cache: 'no-store' });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const { payload } = await response.json();
-    location.assign(`index.html?v=1&d=${encodeURIComponent(payload)}`);
+    location.assign(`index.html?v=2&d=${encodeURIComponent(payload)}`);
   } catch (error) {
     status.innerHTML = 'Не удалось загрузить <code>tests/vector.json</code>: ' +
       `${String(error.message).replace(/</g, '&lt;')}. Запустите в корне репозитория ` +

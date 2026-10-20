@@ -15,6 +15,7 @@ import {
   buildGameOp,
   buildRefresh,
   buildSetAvailability,
+  courtsForGame,
   dayMinutes,
   desiredDays,
   effectiveCells,
@@ -25,7 +26,7 @@ import {
   toSlots,
 } from './payload.js';
 
-const APP_VERSION = '0.1.0'; // версия страницы (спека §4.1)
+const APP_VERSION = '0.2.0'; // версия страницы (спека §4.1)
 
 let snapshot = null; // Snapshot из codec.js — единственный источник данных экранов
 let days = []; // локальные Date для snapshot.dates (тот же порядок)
@@ -41,6 +42,10 @@ const fromIso = (text) => {
 };
 const tm = (m) => `${pad(Math.floor(m / 60))}:${pad(m % 60)}`;
 const timeRange = (start, end) => (start === null ? 'Время не указано' : `${tm(start)}–${tm(end)}`);
+const stampTime = (stamp) => {
+  const at = new Date(stamp * 60_000); // unix-минуты → местное время
+  return tm(at.getHours() * 60 + at.getMinutes());
+};
 const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (text) => String(text).replace(/[&<>"']/g, (c) => ESC[c]); // имена и корт — ввод игроков
 const nameOf = (id) => names.get(id) ?? String(id);
@@ -122,8 +127,7 @@ function act(build) {
 // ------------------------------------------------------------------ шапка
 
 function renderStamp() {
-  const at = new Date(snapshot.stamp * 60_000); // unix-минуты → местное время
-  const lines = [`данные на ${tm(at.getHours() * 60 + at.getMinutes())}`];
+  const lines = [`данные на ${stampTime(snapshot.stamp)}`];
   if (snapshot.flags & FLAG_SHORT_WINDOW) lines.push('показаны 7 дней');
   if (noOthers()) lines.push('без чужой доступности');
   $('stamp').textContent = lines.join('\n');
@@ -396,6 +400,33 @@ function fillTimes(select, from, to, fallback) {
   select.value = String(keep >= from && keep <= to ? keep : Math.min(Math.max(fallback, from), to));
 }
 
+const COURTS_TEXT = {
+  none: 'Свободных кортов нет',
+  too_long: 'Одним слотом клубы продают не больше 2 часов',
+  trimmed: 'Корты не поместились в данные',
+};
+
+/**
+ * «Корты в это время»: клубы, у которых на выбранную дату и время есть корт (courtsForGame).
+ * Бот кортов не присылал (`off`) или дня для игры нет — блок скрыт целиком, без заголовка.
+ */
+function renderCourts() {
+  const { state, names } = gdate
+    ? courtsForGame(snapshot, gdate, +$('gstart').value, +$('gend').value)
+    : { state: 'off', names: [] };
+  $('gcourts-label').hidden = state === 'off';
+  $('gcourts').hidden = state === 'off';
+  let html = '';
+  if (state === 'ok') {
+    html =
+      names.map((name) => `<span class="chip"><b>${esc(name)}</b></span>`).join('') +
+      `<span class="empty">на ${stampTime(snapshot.courts.stamp)}</span>`; // на какое время актуальны корты
+  } else if (state !== 'off') {
+    html = `<span class="empty">${COURTS_TEXT[state]}</span>`;
+  }
+  $('gcourts').innerHTML = html;
+}
+
 function renderGame() {
   const open = snapshot.dates.filter((date) => firstStart(date) < SLOT_END); // сегодня после 22:30 — уже нельзя
   if (!open.includes(gdate)) gdate = open[0] ?? null;
@@ -414,12 +445,14 @@ function renderGame() {
   $('gcreate').disabled = !gdate;
   if (!gdate) {
     $('gwho').innerHTML = '<span class="empty">В этих данных не осталось дней для новой игры</span>';
+    renderCourts();
     return;
   }
   const s = $('gstart');
   const e = $('gend');
   fillTimes(s, firstStart(gdate), SLOT_END - SLOT_STEP, 18 * 60);
   fillTimes(e, +s.value + SLOT_STEP, SLOT_END, +s.value + 120);
+  renderCourts(); // до проверки noOthers: корты не зависят от чужой доступности
   if (noOthers()) {
     $('gwho').innerHTML = '<span class="empty">Неизвестно: чужая доступность не поместилась в данные</span>';
     return;
