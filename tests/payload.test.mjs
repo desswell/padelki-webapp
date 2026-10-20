@@ -19,8 +19,6 @@ const vector = JSON.parse(await readFile(new URL('./vector.json', import.meta.ur
 const snapshot = () => structuredClone(vector.expected);
 
 const TODAY = '2026-10-20';
-const at = (h, m = 0) => new Date(2026, 9, 20, h, m); // местное время устройства
-const MORNING = at(7); // 07:00 — у сегодня ещё не прошло ни одного получаса
 const halfHours = (from, to) => {
   const out = [];
   for (let m = from; m < to; m += 30) out.push(m);
@@ -34,28 +32,28 @@ const bytes = (text) => new TextEncoder().encode(text).length;
 
 test('изменённый день даёт слитые интервалы', () => {
   const edited = new Map([['2026-10-21', new Set([600, 630, 660, 900])]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, MORNING), [
+  assert.deepEqual(desiredDays(snapshot(), edited), [
     { date: '2026-10-21', slots: [[600, 690], [900, 930]] },
   ]);
 });
 
-test('сегодня: начавшиеся получасы не попадают в желаемое состояние', () => {
-  // 13:20 — получас 13:00 уже начался, 13:30 ещё нет
-  const edited = new Map([[TODAY, new Set([600, 630, 780, 810, ...TODAY_PAINTED])]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, at(13, 20)), [
-    { date: TODAY, slots: [[810, 840], [1080, 1200], [1350, 1380]] },
+// Прошлое у сегодня отсекает бот по своим часам. Если часы устройства спешат, отброшенные страницей
+// получасы [часы бота, часы устройства) бот принял бы за снятые и молча стёр бы доступность.
+test('сегодня: часы устройства не отбрасывают получасы — прошлое отсекает бот', () => {
+  const snap = snapshot();
+  snap.availability[1][0] = { free: [[780, 840]], rule: [] }; // объявлено 13:00–14:00
+  // на устройстве 13:20, у бота может быть раньше: получас 13:00 уходит как есть
+  const edited = new Map([[TODAY, new Set([780, 810, 1080, 1110])]]); // докрасили 18:00–19:00
+  assert.deepEqual(desiredDays(snap, edited), [
+    { date: TODAY, slots: [[780, 840], [1080, 1140]] },
   ]);
 });
 
-test('сегодня: правка только прошедших получасов — день не изменён', () => {
-  const edited = new Map([[TODAY, new Set([600, 780, ...TODAY_PAINTED])]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, at(13, 20)), []);
-});
-
-test('отсечка прошлого — только у первого дня среза', () => {
-  const edited = new Map([['2026-10-21', new Set([420])]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, at(22, 0)), [
-    { date: '2026-10-21', slots: [[420, 450]] },
+test('сегодня: начавшиеся получасы отправляются как в срезе, отсекает их бот', () => {
+  // в 19:10 получасы 18:00–19:30 уже начались (в сетке заперты); докрасили 20:00
+  const edited = new Map([[TODAY, new Set([...TODAY_PAINTED, 1200])]]);
+  assert.deepEqual(desiredDays(snapshot(), edited), [
+    { date: TODAY, slots: [[1080, 1230], [1350, 1380]] },
   ]);
 });
 
@@ -65,20 +63,20 @@ test('неизменённые дни не отправляются', () => {
     ['2026-10-21', new Set()],
     ['2026-10-22', new Set([1080, 1110, 1140, 1170])],
   ]);
-  assert.deepEqual(desiredDays(snapshot(), edited, MORNING), []);
+  assert.deepEqual(desiredDays(snapshot(), edited), []);
 });
 
 test('оставленные закрашенными ячейки правила входят в желаемое состояние', () => {
   // сняли одну разовую ячейку 18:00; 18:30–20:00 и 22:30 — из правила, остаются желаемыми
   const edited = new Map([[TODAY, new Set([1110, 1140, 1170, 1350])]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, MORNING), [
+  assert.deepEqual(desiredDays(snapshot(), edited), [
     { date: TODAY, slots: [[1110, 1200], [1350, 1380]] },
   ]);
 });
 
 test('очищенный день отправляется с пустым slots', () => {
   const edited = new Map([['2026-10-22', new Set()]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, MORNING), [{ date: '2026-10-22', slots: [] }]);
+  assert.deepEqual(desiredDays(snapshot(), edited), [{ date: '2026-10-22', slots: [] }]);
 });
 
 test('дни идут в порядке среза, а не в порядке правки', () => {
@@ -87,21 +85,21 @@ test('дни идут в порядке среза, а не в порядке п
     ['2026-10-21', new Set([450])],
   ]);
   assert.deepEqual(
-    desiredDays(snapshot(), edited, MORNING).map((day) => day.date),
+    desiredDays(snapshot(), edited).map((day) => day.date),
     ['2026-10-21', '2026-10-24'],
   );
 });
 
 test('вся сетка закрашена — один интервал 07:00–23:00', () => {
   const edited = new Map([['2026-10-21', new Set(halfHours(420, 1380))]]);
-  assert.deepEqual(desiredDays(snapshot(), edited, MORNING), [
+  assert.deepEqual(desiredDays(snapshot(), edited), [
     { date: '2026-10-21', slots: [[420, 1380]] },
   ]);
 });
 
 test('день вне среза — ошибка', () => {
   const edited = new Map([['2026-11-03', new Set([420])]]);
-  assert.throws(() => desiredDays(snapshot(), edited, MORNING), Error);
+  assert.throws(() => desiredDays(snapshot(), edited), Error);
 });
 
 // ------------------------------------------------------------------ effectiveCells

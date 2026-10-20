@@ -1,6 +1,6 @@
 // Страница календаря: срез из `?d=` (codec.js) → три экрана макета; действия собирает payload.js,
 // отправляет send() через Telegram.WebApp.sendData. Экраны перенесены из утверждённого макета
-// (webapp/index.html в репозитории бота) и читают данные только из `snapshot`.
+// (webapp/index.html в репозитории бота, коммит 0dd4b61) и читают данные только из `snapshot`.
 import {
   decodePayload,
   FLAG_NO_OTHERS,
@@ -311,7 +311,7 @@ function paint(cell) {
 
 /** Панель «Сохранить» — только на экране «Моё время» и только когда есть изменённые дни. */
 function updateSave() {
-  const n = desiredDays(snapshot, mine, new Date()).length;
+  const n = desiredDays(snapshot, mine).length;
   $('savebar').hidden = !n || !$('s-mine').classList.contains('active');
   $('save').textContent = `Сохранить · ${n} ${n === 1 ? 'день' : n < 5 ? 'дня' : 'дней'}`;
 }
@@ -401,7 +401,7 @@ function bindUi() {
   });
   $('save').onclick = () =>
     act(() => {
-      const changed = desiredDays(snapshot, mine, new Date());
+      const changed = desiredDays(snapshot, mine);
       if (!changed.length) throw new Error('Изменений нет');
       return buildSetAvailability(snapshot, changed);
     });
@@ -453,6 +453,7 @@ async function main() {
   const tg = window.Telegram?.WebApp;
   tg?.ready();
   tg?.expand();
+  tg?.disableVerticalSwipes?.(); // иначе мазок вниз от верхней строки сворачивает приложение (Bot API 7.7+)
   const payload = new URLSearchParams(location.search).get('d');
   if (!payload) {
     showNotice('Откройте календарь из бота');

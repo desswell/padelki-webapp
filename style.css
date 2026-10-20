@@ -58,14 +58,15 @@ main { flex: 1; padding: 10px 12px 90px; }
 .weeknav button { border: 0; background: var(--bg2); border-radius: 10px; width: 36px; height: 32px; font-size: 16px; color: var(--link); }
 .legend { display: flex; gap: 12px; color: var(--hint); font-size: 12px; margin-bottom: 8px; flex-wrap: wrap; }
 .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
-.grid { display: grid; grid-template-columns: 44px repeat(7, 1fr); user-select: none; touch-action: none; border-top: 1px solid #e6e8ec; }
+.grid { display: grid; grid-template-columns: 44px repeat(7, 1fr); user-select: none; border-top: 1px solid #e6e8ec; }
 .grid .hd { position: sticky; top: 46px; background: var(--bg); z-index: 3; text-align: center; font-size: 12px; padding: 6px 0 4px; border-bottom: 1px solid #e6e8ec; }
 .grid .hd b { display: block; font-size: 15px; }
 .grid .hd.today b { color: var(--link); }
 .grid .hd.past { color: var(--hint); }
 .grid .tm { font-size: 11px; color: var(--hint); text-align: right; padding-right: 6px; height: var(--cell-h); line-height: var(--cell-h); border-right: 1px solid #e6e8ec; font-variant-numeric: tabular-nums; }
 .grid .tm.hour { border-top: 1px solid #e6e8ec; }
-.cell { height: var(--cell-h); border-right: 1px solid #f0f1f3; border-bottom: 1px dashed #f0f1f3; position: relative; }
+/* жест по ячейке рисует; по колонке времени и заголовкам дней — листает страницу */
+.cell { height: var(--cell-h); border-right: 1px solid #f0f1f3; border-bottom: 1px dashed #f0f1f3; position: relative; touch-action: none; }
 .cell.hour { border-top: 1px solid #e6e8ec; }
 .cell.free { background: var(--free); }
 .cell.rule { background: var(--rule); }

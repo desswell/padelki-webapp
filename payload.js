@@ -13,7 +13,8 @@ const utf8 = new TextEncoder();
 /** Минута суток по часам устройства. */
 export const dayMinutes = (now) => now.getHours() * 60 + now.getMinutes();
 
-/** Получас уже начался: только у сегодня (первый день среза) и раньше текущей минуты устройства. */
+/** Получас уже начался: только у сегодня (первый день среза) и раньше текущей минуты устройства.
+ * Только для сетки (серые запертые ячейки); в отправку не вмешивается — см. desiredDays. */
 export const isPast = (snapshot, date, m, now) => date === snapshot.dates[0] && m < dayMinutes(now);
 
 /** Начала получасов сетки, которые целиком покрыты интервалами. */
@@ -66,15 +67,17 @@ export const painted = (snapshot, date) => freeCells(snapshot, snapshot.me, date
  * Желаемое состояние изменённых дней для `set_availability`.
  *
  * `edited` — дата → начала закрашенных получасов (сетка «Моё время»). В день попадает вся
- * редактируемая область: 07:00–23:00, у сегодня — только не начавшиеся получасы; ячейки правила,
- * оставленные закрашенными, тоже желаемые. День, чья область совпадает со срезом, не изменён и
- * не отправляется; очищенный день — `slots: []`.
+ * редактируемая область 07:00–23:00, у сегодня тоже: начавшиеся получасы в сетке заперты и равны
+ * срезу, а отсекает их бот по своим часам. Часы устройства здесь не участвуют — если они спешат,
+ * отброшенные получасы бот счёл бы снятыми и молча стёр бы доступность. Ячейки правила, оставленные
+ * закрашенными, тоже желаемые. День, чья область совпадает со срезом, не изменён и не отправляется;
+ * очищенный день — `slots: []`.
  */
-export function desiredDays(original, edited, now) {
+export function desiredDays(original, edited) {
   const out = [];
   for (const [date, cells] of edited) {
     if (!original.dates.includes(date)) throw new Error(`День ${date} вне окна календаря`);
-    const editable = (m) => m >= SLOT_START && m < SLOT_END && m % SLOT_STEP === 0 && !isPast(original, date, m, now);
+    const editable = (m) => m >= SLOT_START && m < SLOT_END && m % SLOT_STEP === 0;
     const before = [...painted(original, date)].filter(editable);
     const after = [...cells].filter(editable);
     const same = before.length === after.length && before.every((m) => cells.has(m));
