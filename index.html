@@ -2,11 +2,22 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
+<meta name="color-scheme" content="light dark">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Паделкин — календарь</title>
 <link rel="stylesheet" href="style.css">
 <!-- Официальный SDK Telegram Mini Apps: Telegram.WebApp (ready, expand, sendData). -->
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<!-- Тема ставится до первой отрисовки, чтобы не мигать светлым в тёмном Telegram. -->
+<script>
+  (() => {
+    const tg = window.Telegram?.WebApp;
+    const inside = tg && (tg.platform !== 'unknown' || Boolean(tg.initData)); // вне Telegram SDK тоже есть
+    document.documentElement.dataset.theme = inside
+      ? tg.colorScheme
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  })();
+</script>
 <script type="module" src="app.js"></script>
 </head>
 <body>

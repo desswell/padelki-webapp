@@ -498,9 +498,25 @@ function showNotice(text) {
   for (const el of [$('stamp'), $('refresh'), document.querySelector('.tabs'), $('savebar')]) el.remove();
 }
 
+/** Тема страницы = тема Telegram (светлая/тёмная); вне Telegram — системная. Шапка WebView — в цвет фона. */
+function applyTheme(tg) {
+  const scheme = insideTelegram(tg)
+    ? tg.colorScheme
+    : window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  document.documentElement.dataset.theme = scheme;
+  try {
+    tg?.setHeaderColor?.('bg_color');
+    tg?.setBackgroundColor?.('secondary_bg_color');
+  } catch {
+    /* старые клиенты без этих методов */
+  }
+}
+
 async function main() {
   document.documentElement.dataset.version = APP_VERSION;
   const tg = window.Telegram?.WebApp;
+  applyTheme(tg);
+  tg?.onEvent?.('themeChanged', () => applyTheme(tg));
   tg?.ready();
   tg?.expand();
   tg?.disableVerticalSwipes?.(); // иначе мазок вниз от верхней строки сворачивает приложение (Bot API 7.7+)

@@ -1,4 +1,5 @@
 :root {
+  color-scheme: light;
   --bg: var(--tg-theme-bg-color, #ffffff);
   --bg2: var(--tg-theme-secondary-bg-color, #f2f3f5);
   --text: var(--tg-theme-text-color, #111);
@@ -6,19 +7,47 @@
   --link: var(--tg-theme-link-color, #2481cc);
   --btn: var(--tg-theme-button-color, #2481cc);
   --btn-text: var(--tg-theme-button-text-color, #fff);
-  --free: #cfe6ff; --free-strong: #2481cc; --rule: repeating-linear-gradient(135deg,#cfe6ff 0 4px,#e9f3ff 4px 8px);
+  --on-accent: #fff;
+  --line: var(--tg-theme-section-separator-color, #e6e8ec); /* разделители шапки, сетки */
+  --line-soft: #f0f1f3; /* сетка внутри часа */
+  --border: #d7dbe0; /* рамки полей и «призрачных» кнопок */
+  --past: #fafafa;
+  --free: #cfe6ff; --free-strong: #2481cc; --free-soft: #e9f3ff;
+  --rule: repeating-linear-gradient(135deg, var(--free) 0 4px, var(--free-soft) 4px 8px);
   --game: #d7f5dc; --game-strong: #2ea043; --busy: #ffe1e1;
+  --toast-bg: #222; --toast-text: #fff;
   --cell-h: 26px;
+}
+/* Тёмная тема Telegram: атрибут ставит index.html из Telegram.WebApp.colorScheme (вне Telegram — из
+   prefers-color-scheme). Нейтральные цвета берутся из переменных Telegram, свои — подобраны под них:
+   полупрозрачные заливки, чтобы одинаково смотреться на #212121 (Android) и #1c1c1d (iOS). */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: var(--tg-theme-bg-color, #1c1c1e);
+  --bg2: var(--tg-theme-secondary-bg-color, #2c2c2e);
+  --text: var(--tg-theme-text-color, #f2f2f7);
+  --hint: var(--tg-theme-hint-color, #9a9fa8);
+  --link: var(--tg-theme-link-color, #6ab2f2);
+  --btn: var(--tg-theme-button-color, #3e88f7);
+  --btn-text: var(--tg-theme-button-text-color, #fff);
+  --on-accent: #10233a; /* тёмный текст на светлых акцентных чипах — контрастнее белого */
+  --line: var(--tg-theme-section-separator-color, rgba(255, 255, 255, 0.14));
+  --line-soft: rgba(255, 255, 255, 0.07);
+  --border: rgba(255, 255, 255, 0.2);
+  --past: rgba(255, 255, 255, 0.035);
+  --free: rgba(106, 178, 242, 0.34); --free-strong: #6ab2f2; --free-soft: rgba(106, 178, 242, 0.14);
+  --game: rgba(72, 199, 116, 0.3); --game-strong: #48c774; --busy: rgba(255, 105, 97, 0.28);
+  --toast-bg: #f2f2f7; --toast-text: #111;
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg2); color: var(--text); font: 15px/1.35 -apple-system, "SF Pro Text", Roboto, "Segoe UI", sans-serif; }
 .app { max-width: 480px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); }
-header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 14px 8px; border-bottom: 1px solid #e6e8ec; display: flex; align-items: center; gap: 10px; }
+header { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 10px 14px 8px; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 10px; }
 header h1 { font-size: 17px; margin: 0; flex: 1; }
 header .stamp { color: var(--hint); font-size: 12px; white-space: pre-line; text-align: right; }
 header button { border: 0; background: var(--bg2); color: var(--link); border-radius: 10px; padding: 6px 10px; font-size: 13px; }
 main { flex: 1; padding: 10px 12px 90px; }
-.tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid #e6e8ec; display: flex; justify-content: center; }
+.tabs { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg); border-top: 1px solid var(--line); display: flex; justify-content: center; }
 .tabs .inner { width: 100%; max-width: 480px; display: flex; }
 .tabs button { flex: 1; border: 0; background: transparent; padding: 10px 4px 12px; color: var(--hint); font-size: 12px; display: flex; flex-direction: column; align-items: center; gap: 3px; }
 .tabs button .ic { font-size: 20px; }
@@ -31,7 +60,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 .row { background: var(--bg2); border-radius: 12px; padding: 10px 12px; margin-bottom: 6px; display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .row .t { font-variant-numeric: tabular-nums; font-weight: 600; min-width: 92px; }
 .row .meta { flex: 1; color: var(--text); }
-.row .cnt { background: var(--free-strong); color: #fff; border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 600; }
+.row .cnt { background: var(--free-strong); color: var(--on-accent); border-radius: 999px; padding: 2px 9px; font-size: 12px; font-weight: 600; }
 .row.game { background: var(--game); }
 .row.game .cnt { background: var(--game-strong); }
 .row .chev { color: var(--hint); transition: transform .15s; }
@@ -47,7 +76,7 @@ main { flex: 1; padding: 10px 12px 90px; }
 .card .reserve { color: var(--hint); font-size: 13px; margin-top: 4px; }
 .actions { display: flex; gap: 8px; margin-top: 8px; }
 .btn { border: 0; border-radius: 10px; padding: 9px 12px; font-size: 14px; font-weight: 600; background: var(--btn); color: var(--btn-text); }
-.btn.ghost { background: var(--bg); color: var(--link); border: 1px solid #d7dbe0; }
+.btn.ghost { background: var(--bg); color: var(--link); border: 1px solid var(--border); }
 .empty { color: var(--hint); padding: 8px 2px; }
 .note { color: var(--hint); font-size: 13px; background: var(--bg2); border-radius: 10px; padding: 8px 12px; margin: 0 0 10px; }
 .btn:disabled, .weeknav button:disabled { opacity: .4; }
@@ -58,39 +87,39 @@ main { flex: 1; padding: 10px 12px 90px; }
 .weeknav button { border: 0; background: var(--bg2); border-radius: 10px; width: 36px; height: 32px; font-size: 16px; color: var(--link); }
 .legend { display: flex; gap: 12px; color: var(--hint); font-size: 12px; margin-bottom: 8px; flex-wrap: wrap; }
 .legend i { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 4px; }
-.grid { display: grid; grid-template-columns: 44px repeat(7, 1fr); user-select: none; border-top: 1px solid #e6e8ec; }
-.grid .hd { position: sticky; top: 46px; background: var(--bg); z-index: 3; text-align: center; font-size: 12px; padding: 6px 0 4px; border-bottom: 1px solid #e6e8ec; }
+.grid { display: grid; grid-template-columns: 44px repeat(7, 1fr); user-select: none; border-top: 1px solid var(--line); }
+.grid .hd { position: sticky; top: 46px; background: var(--bg); z-index: 3; text-align: center; font-size: 12px; padding: 6px 0 4px; border-bottom: 1px solid var(--line); }
 .grid .hd b { display: block; font-size: 15px; }
 .grid .hd.today b { color: var(--link); }
 .grid .hd.past { color: var(--hint); }
-.grid .tm { font-size: 11px; color: var(--hint); text-align: right; padding-right: 6px; height: var(--cell-h); line-height: var(--cell-h); border-right: 1px solid #e6e8ec; font-variant-numeric: tabular-nums; }
-.grid .tm.hour { border-top: 1px solid #e6e8ec; }
+.grid .tm { font-size: 11px; color: var(--hint); text-align: right; padding-right: 6px; height: var(--cell-h); line-height: var(--cell-h); border-right: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.grid .tm.hour { border-top: 1px solid var(--line); }
 /* жест по ячейке рисует; по колонке времени и заголовкам дней — листает страницу */
-.cell { height: var(--cell-h); border-right: 1px solid #f0f1f3; border-bottom: 1px dashed #f0f1f3; position: relative; touch-action: pan-y; -webkit-touch-callout: none; }
-.cell.hour { border-top: 1px solid #e6e8ec; }
+.cell { height: var(--cell-h); border-right: 1px solid var(--line-soft); border-bottom: 1px dashed var(--line-soft); position: relative; touch-action: pan-y; -webkit-touch-callout: none; }
+.cell.hour { border-top: 1px solid var(--line); }
 .cell.free { background: var(--free); }
 .cell.rule { background: var(--rule); }
 .cell.game { background: var(--game); }
-.cell.past { background: #fafafa; }
+.cell.past { background: var(--past); }
 .cell.changed::after { content: ""; position: absolute; inset: 2px; border: 2px solid var(--free-strong); border-radius: 4px; pointer-events: none; }
 .cell.game.first::before, .cell.free.first::before { content: attr(data-label); position: absolute; left: 3px; top: 2px; font-size: 9px; color: var(--text); white-space: nowrap; overflow: hidden; max-width: calc(100% - 6px); }
 .savebar[hidden] { display: none; }
 .savebar { position: fixed; bottom: 62px; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; }
 .savebar .inner { pointer-events: auto; max-width: 480px; width: 100%; padding: 0 12px; display: flex; gap: 8px; }
-.savebar .btn { flex: 1; box-shadow: 0 6px 20px rgba(0,0,0,.15); }
+.savebar .btn { flex: 1; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
 .hint { color: var(--hint); font-size: 13px; margin: 8px 0; }
 
 /* --- Игра --- */
 .form label { display: block; color: var(--hint); font-size: 12px; margin: 12px 0 4px; text-transform: uppercase; letter-spacing: .02em; }
 .dates { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
-.dates button { border: 1px solid #d7dbe0; background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 56px; font-size: 13px; color: var(--text); }
+.dates button { border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 8px 10px; min-width: 56px; font-size: 13px; color: var(--text); }
 .dates button b { display: block; font-size: 15px; }
-.dates button.sel { background: var(--btn); color: #fff; border-color: var(--btn); }
-.dates button.sel b { color: #fff; }
+.dates button.sel { background: var(--btn); color: var(--btn-text); border-color: var(--btn); }
+.dates button.sel b { color: var(--btn-text); }
 .times { display: flex; gap: 8px; align-items: center; }
-select, input[type=text] { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid #d7dbe0; background: var(--bg); color: var(--text); }
+select, input[type=text] { width: 100%; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); color: var(--text); }
 .who { margin-top: 8px; }
-.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; max-width: 90%; overflow-wrap: anywhere; }
+.toast { position: fixed; left: 50%; bottom: 120px; transform: translateX(-50%); background: var(--toast-bg); color: var(--toast-text); padding: 10px 14px; border-radius: 10px; font-size: 13px; opacity: 0; transition: opacity .2s; max-width: 90%; overflow-wrap: anywhere; }
 .toast.show { opacity: .95; }
 
 /* --- Каркас страницы --- */

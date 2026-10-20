@@ -29,3 +29,12 @@ test('закраска пальцем — только после удержан
 test('свайп вниз не сворачивает приложение: disableVerticalSwipes, если клиент его знает', async () => {
   assert.match(await source('app.js'), /tg\?\.disableVerticalSwipes\?\.\(\)/);
 });
+
+test('тёмная тема: цвета только через токены, тёмный набор и переключение по теме Telegram', async () => {
+  const css = await source('style.css');
+  const body = css.slice(css.indexOf('* { box-sizing'));
+  assert.doesNotMatch(body, /#[0-9a-f]{3,6}\b/i, 'в правилах не должно быть захардкоженных цветов');
+  assert.match(css, /:root\[data-theme="dark"\]\s*\{/);
+  assert.match(await source('index.html'), /dataset\.theme\s*=/);
+  assert.match(await source('app.js'), /onEvent\?\.\('themeChanged'/);
+});
