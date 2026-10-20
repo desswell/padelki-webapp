@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Паделкин — календарь (dev)</title>
+<style>
+  body { font: 15px/1.4 -apple-system, "SF Pro Text", Roboto, "Segoe UI", sans-serif; margin: 24px; color: #111; }
+  code { background: #f2f3f5; padding: 1px 4px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<p id="status">Загружаю tests/vector.json…</p>
+<script type="module">
+  // Ручная проверка: index.html со срезом из общего тест-вектора, как его прислал бы бот.
+  // Нужен HTTP-сервер (fetch и ES-модули не работают с file://): python3 -m http.server 8080
+  const status = document.getElementById('status');
+  try {
+    const response = await fetch('tests/vector.json', { cache: 'no-store' });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const { payload } = await response.json();
+    location.assign(`index.html?v=1&d=${encodeURIComponent(payload)}`);
+  } catch (error) {
+    status.innerHTML = 'Не удалось загрузить <code>tests/vector.json</code>: ' +
+      `${String(error.message).replace(/</g, '&lt;')}. Запустите в корне репозитория ` +
+      '<code>python3 -m http.server 8080</code> и откройте <code>http://localhost:8080/dev.html</code>.';
+  }
+</script>
+</body>
+</html>

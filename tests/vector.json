@@ -1,0 +1,293 @@
+{
+ "expected": {
+  "availability": {
+   "1": [
+    {
+     "free": [
+      [
+       1080,
+       1140
+      ]
+     ],
+     "rule": [
+      [
+       1080,
+       1200
+      ],
+      [
+       1350,
+       1380
+      ]
+     ]
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [
+      [
+       1080,
+       1200
+      ]
+     ],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    }
+   ],
+   "3": [
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": [
+      [
+       1020,
+       1110
+      ]
+     ]
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    }
+   ],
+   "5123456789": [
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [
+      [
+       420,
+       450
+      ],
+      [
+       720,
+       780
+      ]
+     ],
+     "rule": [
+      [
+       720,
+       780
+      ]
+     ]
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    },
+    {
+     "free": [],
+     "rule": []
+    }
+   ]
+  },
+  "dates": [
+   "2026-10-20",
+   "2026-10-21",
+   "2026-10-22",
+   "2026-10-23",
+   "2026-10-24",
+   "2026-10-25",
+   "2026-10-26",
+   "2026-10-27",
+   "2026-10-28",
+   "2026-10-29",
+   "2026-10-30",
+   "2026-10-31",
+   "2026-11-01",
+   "2026-11-02"
+  ],
+  "days": 14,
+  "flags": 5,
+  "games": [
+   {
+    "booked": true,
+    "court": "Корт 2",
+    "creator": 1,
+    "date": "2026-10-22",
+    "end": 1200,
+    "guests": [
+     [
+      5123456789,
+      1
+     ]
+    ],
+    "id": 101,
+    "start": 1080,
+    "waiting": [
+     3
+    ],
+    "yes": [
+     1,
+     5123456789
+    ]
+   },
+   {
+    "booked": false,
+    "court": "",
+    "creator": null,
+    "date": "2026-10-25",
+    "end": null,
+    "guests": [],
+    "id": 102,
+    "start": null,
+    "waiting": [],
+    "yes": [
+     3
+    ]
+   }
+  ],
+  "me": 1,
+  "players": [
+   {
+    "id": 1,
+    "name": "@ivan"
+   },
+   {
+    "id": 3,
+    "name": "@petya"
+   },
+   {
+    "id": 5123456789,
+    "name": "@vasya"
+   }
+  ],
+  "stamp": 29874860,
+  "start_date": "2026-10-20",
+  "version": 1
+ },
+ "payload": "Y2RlPH5rDecWPkYGZgYIYGR1yCxLzIPymNkcClJLKhNBEoaJ-0XZHMoSi4HcAwwMzQcY4IAZiU03UMAwCAAPIxBTbgwTEKcysViwbGBk5Low68K-iw0XmxSMmBiZgZARJJvG-h8IQPEA5AEA"
+}

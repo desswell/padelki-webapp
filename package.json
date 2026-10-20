@@ -1,0 +1,10 @@
+{
+  "name": "padelki-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Telegram Mini App «Календарь» для бота Паделкин: статическая страница без бэкенда",
+  "type": "module",
+  "scripts": {
+    "test": "node --test"
+  }
+}
